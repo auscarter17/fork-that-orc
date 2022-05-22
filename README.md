@@ -61,6 +61,6 @@
   This project is covered under the gpl3.0 license. For more information, visit this [resource](https://choosealicense.com/licenses/) on project licenses.
 
   # Questions
-  If you have any questions, you can find me on [github](https://github.com/cory-hall).
+  If you have any questions, you can find me on [github](https://github.com/auscarter17).
   
 
