@@ -113,30 +113,70 @@ if ($gOPD) {
 module.exports = $gOPD;
 
 },{"get-intrinsic":8}],5:[function(require,module,exports){
+'use strict';
 
-var hasOwn = Object.prototype.hasOwnProperty;
-var toString = Object.prototype.toString;
+var isCallable = require('is-callable');
 
-module.exports = function forEach (obj, fn, ctx) {
-    if (toString.call(fn) !== '[object Function]') {
-        throw new TypeError('iterator must be a function');
-    }
-    var l = obj.length;
-    if (l === +l) {
-        for (var i = 0; i < l; i++) {
-            fn.call(ctx, obj[i], i, obj);
-        }
-    } else {
-        for (var k in obj) {
-            if (hasOwn.call(obj, k)) {
-                fn.call(ctx, obj[k], k, obj);
+var toStr = Object.prototype.toString;
+var hasOwnProperty = Object.prototype.hasOwnProperty;
+
+var forEachArray = function forEachArray(array, iterator, receiver) {
+    for (var i = 0, len = array.length; i < len; i++) {
+        if (hasOwnProperty.call(array, i)) {
+            if (receiver == null) {
+                iterator(array[i], i, array);
+            } else {
+                iterator.call(receiver, array[i], i, array);
             }
         }
     }
 };
 
+var forEachString = function forEachString(string, iterator, receiver) {
+    for (var i = 0, len = string.length; i < len; i++) {
+        // no such thing as a sparse string.
+        if (receiver == null) {
+            iterator(string.charAt(i), i, string);
+        } else {
+            iterator.call(receiver, string.charAt(i), i, string);
+        }
+    }
+};
 
-},{}],6:[function(require,module,exports){
+var forEachObject = function forEachObject(object, iterator, receiver) {
+    for (var k in object) {
+        if (hasOwnProperty.call(object, k)) {
+            if (receiver == null) {
+                iterator(object[k], k, object);
+            } else {
+                iterator.call(receiver, object[k], k, object);
+            }
+        }
+    }
+};
+
+var forEach = function forEach(list, iterator, thisArg) {
+    if (!isCallable(iterator)) {
+        throw new TypeError('iterator must be a function');
+    }
+
+    var receiver;
+    if (arguments.length >= 3) {
+        receiver = thisArg;
+    }
+
+    if (toStr.call(list) === '[object Array]') {
+        forEachArray(list, iterator, receiver);
+    } else if (typeof list === 'string') {
+        forEachString(list, iterator, receiver);
+    } else {
+        forEachObject(list, iterator, receiver);
+    }
+};
+
+module.exports = forEach;
+
+},{"is-callable":15}],6:[function(require,module,exports){
 'use strict';
 
 /* eslint no-invalid-this: 1 */
@@ -671,6 +711,82 @@ module.exports = supportsStandardArguments ? isStandardArguments : isLegacyArgum
 },{"call-bind/callBound":2,"has-tostringtag/shams":11}],15:[function(require,module,exports){
 'use strict';
 
+var fnToStr = Function.prototype.toString;
+var reflectApply = typeof Reflect === 'object' && Reflect !== null && Reflect.apply;
+var badArrayLike;
+var isCallableMarker;
+if (typeof reflectApply === 'function' && typeof Object.defineProperty === 'function') {
+	try {
+		badArrayLike = Object.defineProperty({}, 'length', {
+			get: function () {
+				throw isCallableMarker;
+			}
+		});
+		isCallableMarker = {};
+		// eslint-disable-next-line no-throw-literal
+		reflectApply(function () { throw 42; }, null, badArrayLike);
+	} catch (_) {
+		if (_ !== isCallableMarker) {
+			reflectApply = null;
+		}
+	}
+} else {
+	reflectApply = null;
+}
+
+var constructorRegex = /^\s*class\b/;
+var isES6ClassFn = function isES6ClassFunction(value) {
+	try {
+		var fnStr = fnToStr.call(value);
+		return constructorRegex.test(fnStr);
+	} catch (e) {
+		return false; // not a function
+	}
+};
+
+var tryFunctionObject = function tryFunctionToStr(value) {
+	try {
+		if (isES6ClassFn(value)) { return false; }
+		fnToStr.call(value);
+		return true;
+	} catch (e) {
+		return false;
+	}
+};
+var toStr = Object.prototype.toString;
+var fnClass = '[object Function]';
+var genClass = '[object GeneratorFunction]';
+var hasToStringTag = typeof Symbol === 'function' && !!Symbol.toStringTag; // better: use `has-tostringtag`
+/* globals document: false */
+var documentDotAll = typeof document === 'object' && typeof document.all === 'undefined' && document.all !== undefined ? document.all : {};
+
+module.exports = reflectApply
+	? function isCallable(value) {
+		if (value === documentDotAll) { return true; }
+		if (!value) { return false; }
+		if (typeof value !== 'function' && typeof value !== 'object') { return false; }
+		if (typeof value === 'function' && !value.prototype) { return true; }
+		try {
+			reflectApply(value, null, badArrayLike);
+		} catch (e) {
+			if (e !== isCallableMarker) { return false; }
+		}
+		return !isES6ClassFn(value);
+	}
+	: function isCallable(value) {
+		if (value === documentDotAll) { return true; }
+		if (!value) { return false; }
+		if (typeof value !== 'function' && typeof value !== 'object') { return false; }
+		if (typeof value === 'function' && !value.prototype) { return true; }
+		if (hasToStringTag) { return tryFunctionObject(value); }
+		if (isES6ClassFn(value)) { return false; }
+		var strClass = toStr.call(value);
+		return strClass === fnClass || strClass === genClass;
+	};
+
+},{}],16:[function(require,module,exports){
+'use strict';
+
 var toStr = Object.prototype.toString;
 var fnToStr = Function.prototype.toString;
 var isFnRegex = /^\s*(?:function)?\*/;
@@ -708,11 +824,11 @@ module.exports = function isGeneratorFunction(fn) {
 	return getProto(fn) === GeneratorFunction;
 };
 
-},{"has-tostringtag/shams":11}],16:[function(require,module,exports){
+},{"has-tostringtag/shams":11}],17:[function(require,module,exports){
 (function (global){(function (){
 'use strict';
 
-var forEach = require('foreach');
+var forEach = require('for-each');
 var availableTypedArrays = require('available-typed-arrays');
 var callBound = require('call-bind/callBound');
 
@@ -772,7 +888,7 @@ module.exports = function isTypedArray(value) {
 };
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"available-typed-arrays":1,"call-bind/callBound":2,"es-abstract/helpers/getOwnPropertyDescriptor":4,"foreach":5,"has-tostringtag/shams":11}],17:[function(require,module,exports){
+},{"available-typed-arrays":1,"call-bind/callBound":2,"es-abstract/helpers/getOwnPropertyDescriptor":4,"for-each":5,"has-tostringtag/shams":11}],18:[function(require,module,exports){
 // shim for using process in browser
 var process = module.exports = {};
 
@@ -958,7 +1074,7 @@ process.chdir = function (dir) {
 };
 process.umask = function() { return 0; };
 
-},{}],18:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1096,7 +1212,7 @@ process.umask = function() { return 0; };
 
 }());
 
-},{"./input-error.js":19,"./keys":20,"./transforms":24}],19:[function(require,module,exports){
+},{"./input-error.js":20,"./keys":21,"./transforms":25}],20:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1122,7 +1238,7 @@ process.umask = function() { return 0; };
 }());
 
 
-},{"util":31}],20:[function(require,module,exports){
+},{"util":32}],21:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1170,7 +1286,7 @@ process.umask = function() { return 0; };
 }());
 
 
-},{}],21:[function(require,module,exports){
+},{}],22:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1183,7 +1299,7 @@ process.umask = function() { return 0; };
 }());
 
 
-},{}],22:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1204,7 +1320,7 @@ process.umask = function() { return 0; };
 }());
 
 
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1217,7 +1333,7 @@ process.umask = function() { return 0; };
 }());
 
 
-},{}],24:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 module.exports = {
@@ -1231,7 +1347,7 @@ module.exports = {
 };
 
 
-},{"./add":21,"./best-of":22,"./divide":23,"./multiply":25,"./subtract":26,"./sum":27,"./worst-of":28}],25:[function(require,module,exports){
+},{"./add":22,"./best-of":23,"./divide":24,"./multiply":26,"./subtract":27,"./sum":28,"./worst-of":29}],26:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1244,7 +1360,7 @@ module.exports = {
 }());
 
 
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1257,7 +1373,7 @@ module.exports = {
 }());
 
 
-},{}],27:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1272,7 +1388,7 @@ module.exports = {
 }());
 
 
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 /*jslint indent: 2*/
 /*global require: true, module: true*/
 (function () {
@@ -1293,14 +1409,14 @@ module.exports = {
 }());
 
 
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 module.exports = function isBuffer(arg) {
   return arg && typeof arg === 'object'
     && typeof arg.copy === 'function'
     && typeof arg.fill === 'function'
     && typeof arg.readUInt8 === 'function';
 }
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 // Currently in sync with Node.js lib/internal/util/types.js
 // https://github.com/nodejs/node/commit/112cc7c27551254aa2b17098fb774867f05ed0d9
 
@@ -1636,7 +1752,7 @@ exports.isAnyArrayBuffer = isAnyArrayBuffer;
   });
 });
 
-},{"is-arguments":14,"is-generator-function":15,"is-typed-array":16,"which-typed-array":32}],31:[function(require,module,exports){
+},{"is-arguments":14,"is-generator-function":16,"is-typed-array":17,"which-typed-array":33}],32:[function(require,module,exports){
 (function (process){(function (){
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -2355,11 +2471,11 @@ function callbackify(original) {
 exports.callbackify = callbackify;
 
 }).call(this)}).call(this,require('_process'))
-},{"./support/isBuffer":29,"./support/types":30,"_process":17,"inherits":13}],32:[function(require,module,exports){
+},{"./support/isBuffer":30,"./support/types":31,"_process":18,"inherits":13}],33:[function(require,module,exports){
 (function (global){(function (){
 'use strict';
 
-var forEach = require('foreach');
+var forEach = require('for-each');
 var availableTypedArrays = require('available-typed-arrays');
 var callBound = require('call-bind/callBound');
 
@@ -2414,7 +2530,7 @@ module.exports = function whichTypedArray(value) {
 };
 
 }).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"available-typed-arrays":1,"call-bind/callBound":2,"es-abstract/helpers/getOwnPropertyDescriptor":4,"foreach":5,"has-tostringtag/shams":11,"is-typed-array":16}],33:[function(require,module,exports){
+},{"available-typed-arrays":1,"call-bind/callBound":2,"es-abstract/helpers/getOwnPropertyDescriptor":4,"for-each":5,"has-tostringtag/shams":11,"is-typed-array":17}],34:[function(require,module,exports){
 // data to supplement the random fields on the document
 const warriorArmor = [
   {
@@ -2486,11 +2602,10 @@ const mageArmor = [
 ];
 
 module.exports = { warriorArmor, rogueArmor, mageArmor };
-},{}],34:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 // required library
 var Roll = require('roll'),
   roll = new Roll();
-
 
 // required imported data
 var { firstName, lastName } = require('./name-arrays');
@@ -2625,8 +2740,6 @@ const rollStatHandler = (event) => {
   intField.value = int;
 };
 
-// function to add the weapon, armor, and character to the database
-
 
 document.querySelector('.name-btn').addEventListener('click', randomNameHandler);
 document.querySelector('.roll-char').addEventListener('click', rollStatHandler);
@@ -2634,7 +2747,7 @@ document.querySelector('.wep-btn').addEventListener('click', randomWepHandler);
 document.querySelector('.arm-btn').addEventListener('click', randomArmHandler);
 
 
-},{"./armor-arrays":33,"./name-arrays":35,"./weapon-arrays":36,"roll":18}],35:[function(require,module,exports){
+},{"./armor-arrays":34,"./name-arrays":36,"./weapon-arrays":37,"roll":19}],36:[function(require,module,exports){
 // data to supplement the random fields on the document
 const firstName = [
   'The Butcher',
@@ -2682,7 +2795,7 @@ const lastName = [
 ];
 
 module.exports = { firstName, lastName };
-},{}],36:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 // data to supplement the random fields on the document
 const warriorWeapon = [
   {
@@ -2766,4 +2879,4 @@ const mageWeapon = [
 ];
 
 module.exports = { warriorWeapon, rogueWeapon, mageWeapon };
-},{}]},{},[34]);
+},{}]},{},[35]);
