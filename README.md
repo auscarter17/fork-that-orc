@@ -12,7 +12,7 @@
 
   # Installation
   Download the repo. Point your terminal to the directory of the repo, and run 'npm i' to install the required modules for the application to run. Fork That Orc also requires a .env file. Create your .env at the root of the directory, and fill in the values as directed in the config>connection.js file. After the packages are installed and the .env is in place, run 'npm start' in your terminal. When you recieve the 'Now Listening!' confirmation message, navigate to localhost:3001 in your browser to see the application. If you encounter an error after running start, check that your .env contains the proper information and is at the root of the application (fork-that-orc/.env). 
-  The application is also hosted on [Heroku.](https://fork-that-orc.herokuapp.com/)
+  The application is also hosted on [Heroku.](https://forkthatorc.herokuapp.com/)
 
   # Usage
 
